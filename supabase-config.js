@@ -6,6 +6,6 @@
 //    JANGAN pernah taruh Secret Key / service_role di GitHub.
 // ============================================================
 window.NCT_SUPABASE_CONFIG = {
-  url: 'PASTE_SUPABASE_PROJECT_URL_HERE',
-  publishableKey: 'PASTE_SUPABASE_PUBLISHABLE_KEY_HERE'
+  url: 'https://cdvqiaerxchtbynektzq.supabase.co',
+  publishableKey: 'sb_publishable_oCRj2xMaeduN7_Fg1aZRQg_MfQfvkqw'
 };
