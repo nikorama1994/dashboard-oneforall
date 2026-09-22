@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Login | Dashboard Produksi Giling</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="./supabase-config.js"></script>
+  <script src="./supabase-api.js"></script>
+  <style>
+    :root{--bg:#0d0915;--panel:#17111f;--line:#5b426d;--purple:#80609b;--purple2:#a987bd;--text:#f3edf7;--muted:#9f91aa;--danger:#ff8b9a;--ok:#8fe0c4}
+    *{box-sizing:border-box} html,body{min-height:100%}
+    body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;color:var(--text);font-family:Inter,Segoe UI,Arial,sans-serif;background:radial-gradient(circle at 15% 20%,rgba(128,96,155,.20),transparent 35%),radial-gradient(circle at 85% 85%,rgba(74,163,255,.10),transparent 35%),linear-gradient(145deg,#09070d,#120b1d 55%,#0c0d11)}
+    .shell{width:min(980px,100%);display:grid;grid-template-columns:1.08fr .92fr;border:1px solid rgba(169,135,189,.23);border-radius:26px;overflow:hidden;box-shadow:0 30px 90px rgba(0,0,0,.45);background:rgba(15,11,22,.87);backdrop-filter:blur(12px)}
+    .brand{position:relative;min-height:650px;padding:54px;display:flex;flex-direction:column;justify-content:space-between;background:linear-gradient(155deg,rgba(74,33,95,.72),rgba(17,16,23,.96));overflow:hidden}
+    .brand:before,.brand:after{content:"";position:absolute;border-radius:50%}.brand:before{width:340px;height:340px;right:-150px;top:-80px;background:rgba(169,135,189,.10)}.brand:after{width:220px;height:220px;left:-90px;bottom:-80px;background:rgba(74,163,255,.07)}
+    .eyebrow{font-size:11px;letter-spacing:2px;font-weight:800;color:#c7b4d5;text-transform:uppercase}.brand h1{font-size:42px;line-height:1.03;margin:18px 0 16px;letter-spacing:-1.5px;max-width:500px}.brand p{color:#b9aeba;line-height:1.65;font-size:14px;max-width:470px}
+    .brandTag{display:inline-flex;align-items:center;gap:10px;color:#dcd0e3;font-size:12px;font-weight:700}.brandTag span{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:#2c1f38;border:1px solid #654b77;font-weight:900}
+    .loginPane{padding:46px 48px;display:flex;flex-direction:column;justify-content:center;background:linear-gradient(180deg,rgba(24,18,32,.98),rgba(16,13,20,.98))}.loginPane h2{font-size:28px;margin:0 0 8px}.intro{font-size:13px;color:var(--muted);margin:0 0 20px;line-height:1.6}
+    .tabs{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:5px;border:1px solid #463552;background:#100b18;border-radius:13px;margin-bottom:22px}.tabBtn{height:39px;border:0;border-radius:9px;background:transparent;color:#a99aae;font-weight:900;cursor:pointer}.tabBtn.active{background:linear-gradient(135deg,#76578f,#5e426f);color:#fff;box-shadow:0 5px 15px rgba(0,0,0,.2)}
+    label{display:block;margin:0 0 8px;font-size:10px;letter-spacing:.8px;color:#c3b5cc;font-weight:900;text-transform:uppercase}.field{margin-bottom:16px}.inputWrap{position:relative}
+    input{width:100%;height:50px;padding:0 46px 0 14px;border-radius:12px;border:1px solid #4f3a60;outline:none;background:#100b18;color:#fff;font-size:14px;transition:.18s ease}input:focus{border-color:var(--purple2);box-shadow:0 0 0 3px rgba(169,135,189,.12)}
+    .togglePass{position:absolute;right:8px;top:7px;width:36px;height:36px;border:0;border-radius:9px;background:transparent;color:#a99aae;cursor:pointer;font-size:17px}
+    .submitBtn{width:100%;height:50px;border:0;border-radius:12px;cursor:pointer;color:white;font-weight:900;font-size:14px;background:linear-gradient(135deg,#8c6aa8,#6f4e89);box-shadow:0 10px 26px rgba(111,78,137,.28);transition:.18s ease}.submitBtn:hover{transform:translateY(-1px);filter:brightness(1.08)}.submitBtn[disabled]{opacity:.65;cursor:wait;transform:none!important}
+    .message{min-height:22px;margin-top:14px;font-size:12px;color:var(--danger);text-align:center;font-weight:700;line-height:1.5}.message.ok{color:var(--ok)}
+    .foot{margin-top:22px;padding-top:18px;border-top:1px solid rgba(91,66,109,.45);font-size:10px;line-height:1.55;color:#807486;text-align:center}.hint{margin:0 0 18px;padding:10px 12px;border:1px solid #463552;border-radius:10px;background:#140e1d;color:#aa9ab4;font-size:11px;line-height:1.5}
+    .signupOnly,.loginOnly{display:none}.panelModeLogin .loginOnly{display:block}.panelModeSignup .signupOnly{display:block}
+    .smallNote{margin:-6px 0 16px;color:#8f8298;font-size:10px;line-height:1.45}
+    .roleChoiceGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}.roleChoice{position:relative;display:block;cursor:pointer}.roleChoice input{position:absolute;opacity:0;pointer-events:none}.roleChoiceCard{height:74px;border:1px solid #4f3a60;border-radius:12px;background:#100b18;padding:11px 12px;transition:.18s ease}.roleChoiceCard b{display:block;color:#efe6f5;font-size:12px;margin-bottom:5px}.roleChoiceCard small{display:block;color:#908398;font-size:9.5px;line-height:1.35}.roleChoice input:checked + .roleChoiceCard{border-color:#a987bd;background:linear-gradient(145deg,#2b1b3d,#17111f);box-shadow:0 0 0 2px rgba(169,135,189,.12)}.roleChoice input:focus-visible + .roleChoiceCard{outline:2px solid #a987bd;outline-offset:2px}.approvalNote{margin:-5px 0 16px;padding:9px 10px;border:1px solid #5b426d;border-radius:9px;background:#1a1222;color:#b7a8c0;font-size:10px;line-height:1.45}
+    @media(max-width:780px){body{padding:14px}.shell{grid-template-columns:1fr}.brand{display:none}.loginPane{padding:32px 24px;min-height:620px}}
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="brand">
+      <div><div class="eyebrow">PT NIKORAMA CITRA TOBACCO</div><h1>Production Dashboard Access</h1><p>Portal Dashboard Produksi Giling SKT yang terhubung ke Supabase. Pendaftar dapat meminta akses Viewer atau Admin; permintaan Admin harus disetujui Admin yang sudah aktif.</p></div>
+      <div class="brandTag"><span>S</span><div>Station SKT<br><small style="color:#93859d;font-weight:600">Manufacturing Dashboard</small></div></div>
+    </section>
+
+    <section class="loginPane panelModeLogin" id="authPane">
+      <div>
+        <h2 id="pageTitle">Selamat datang</h2>
+        <p class="intro" id="pageIntro">Masuk menggunakan username dan password.</p>
+
+        <div class="tabs">
+          <button type="button" class="tabBtn active" id="loginTab">Masuk</button>
+          <button type="button" class="tabBtn" id="signupTab">Daftar</button>
+        </div>
+
+        <div class="hint loginOnly"><b>Admin</b> dapat mengubah data. <b>Viewer</b> hanya dapat melihat. Gunakan username seperti <b>admin.001</b> atau <b>viewer.001</b>.</div>
+        <div class="hint signupOnly">Pilih akses <b>Viewer</b> atau <b>Admin</b>. Viewer langsung aktif. Permintaan Admin tetap memiliki akses Viewer sampai disetujui oleh Admin yang sudah aktif.</div>
+
+        <form id="loginForm" class="loginOnly" autocomplete="on">
+          <div class="field"><label for="loginUsername">Username</label><div class="inputWrap"><input id="loginUsername" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="contoh: admin.001" required></div></div>
+          <div class="field"><label for="loginPassword">Password</label><div class="inputWrap"><input id="loginPassword" name="password" type="password" autocomplete="current-password" required><button class="togglePass" type="button" data-target="loginPassword" aria-label="Tampilkan password">◉</button></div></div>
+          <button id="loginSubmit" class="submitBtn" type="submit">Masuk ke Dashboard</button>
+        </form>
+
+        <form id="signupForm" class="signupOnly" autocomplete="off">
+          <div class="field"><label for="signupUsername">Username baru</label><div class="inputWrap"><input id="signupUsername" name="new-username" type="text" autocapitalize="none" spellcheck="false" placeholder="contoh: viewer.002" required></div></div>
+          <div class="smallNote">Gunakan 3–32 karakter: huruf kecil, angka, titik, underscore, atau tanda minus.</div>
+          <div class="field"><label for="signupName">Nama tampilan</label><div class="inputWrap"><input id="signupName" name="name" type="text" maxlength="80" placeholder="contoh: Budi Produksi" required></div></div>
+          <div class="field">
+            <label>Daftar sebagai</label>
+            <div class="roleChoiceGrid" role="radiogroup" aria-label="Pilih jenis akses">
+              <label class="roleChoice"><input type="radio" name="signupRole" value="viewer" checked><span class="roleChoiceCard"><b>Viewer</b><small>Langsung aktif dan hanya dapat melihat data.</small></span></label>
+              <label class="roleChoice"><input type="radio" name="signupRole" value="admin"><span class="roleChoiceCard"><b>Admin</b><small>Meminta hak input/edit. Harus disetujui Admin aktif.</small></span></label>
+            </div>
+          </div>
+          <div class="approvalNote" id="signupApprovalNote">Viewer akan langsung aktif setelah pendaftaran.</div>
+          <div class="field"><label for="signupPassword">Password</label><div class="inputWrap"><input id="signupPassword" name="new-password" type="password" autocomplete="new-password" minlength="8" required><button class="togglePass" type="button" data-target="signupPassword" aria-label="Tampilkan password">◉</button></div></div>
+          <div class="field"><label for="signupPassword2">Ulangi password</label><div class="inputWrap"><input id="signupPassword2" name="confirm-password" type="password" autocomplete="new-password" minlength="8" required><button class="togglePass" type="button" data-target="signupPassword2" aria-label="Tampilkan password">◉</button></div></div>
+          <button id="signupSubmit" class="submitBtn" type="submit">Daftar sebagai Viewer</button>
+        </form>
+
+        <div id="message" class="message" role="alert" aria-live="polite"></div>
+        <div class="foot">Authentication, role, dan penyimpanan data bersama ditangani oleh Supabase. Password tidak disimpan di file HTML/GitHub.</div>
+      </div>
+    </section>
+  </main>
+
+<script>
+(async function(){
+  'use strict';
+  const INTERNAL_DOMAIN='dashboard.internal';
+  const pane=document.getElementById('authPane');
+  const message=document.getElementById('message');
+  const loginTab=document.getElementById('loginTab');
+  const signupTab=document.getElementById('signupTab');
+  const pageTitle=document.getElementById('pageTitle');
+  const pageIntro=document.getElementById('pageIntro');
+
+  const loginForm=document.getElementById('loginForm');
+  const loginUsername=document.getElementById('loginUsername');
+  const loginPassword=document.getElementById('loginPassword');
+  const loginSubmit=document.getElementById('loginSubmit');
+
+  const signupForm=document.getElementById('signupForm');
+  const signupUsername=document.getElementById('signupUsername');
+  const signupName=document.getElementById('signupName');
+  const signupPassword=document.getElementById('signupPassword');
+  const signupPassword2=document.getElementById('signupPassword2');
+  const signupSubmit=document.getElementById('signupSubmit');
+  const signupApprovalNote=document.getElementById('signupApprovalNote');
+
+  function selectedSignupRole(){
+    return document.querySelector('input[name="signupRole"]:checked')?.value==='admin'?'admin':'viewer';
+  }
+
+  function refreshSignupRoleUI(){
+    const role=selectedSignupRole();
+    signupSubmit.textContent=role==='admin'?'Kirim Permintaan Admin':'Daftar sebagai Viewer';
+    signupApprovalNote.textContent=role==='admin'
+      ? 'Permintaan Admin akan tercatat sebagai PENDING. Sampai disetujui, akun tetap berjalan sebagai Viewer dan tidak dapat mengubah data.'
+      : 'Viewer akan langsung aktif setelah pendaftaran dan hanya dapat melihat data.';
+  }
+
+  function setMessage(text,ok){
+    message.textContent=text||'';
+    message.classList.toggle('ok',!!ok);
+  }
+
+  function normalizeUsername(value){
+    let v=String(value||'').trim().toLowerCase().replace(/\s+/g,'');
+    const suffix='@'+INTERNAL_DOMAIN;
+    if(v.endsWith(suffix)) v=v.slice(0,-suffix.length);
+    return v;
+  }
+
+  function validateUsername(value){
+    return /^[a-z0-9._-]{3,32}$/.test(value);
+  }
+
+  function internalEmail(username){
+    return username+'@'+INTERNAL_DOMAIN;
+  }
+
+  function setMode(mode){
+    const signup=mode==='signup';
+    pane.classList.toggle('panelModeLogin',!signup);
+    pane.classList.toggle('panelModeSignup',signup);
+    loginTab.classList.toggle('active',!signup);
+    signupTab.classList.toggle('active',signup);
+    pageTitle.textContent=signup?'Buat akun':'Selamat datang';
+    pageIntro.textContent=signup?'Pilih jenis akses yang dibutuhkan. Permintaan Admin memerlukan persetujuan.':'Masuk menggunakan username dan password.';
+    setMessage('');
+    setTimeout(function(){(signup?signupUsername:loginUsername).focus()},0);
+  }
+
+  loginTab.addEventListener('click',function(){setMode('login')});
+  signupTab.addEventListener('click',function(){setMode('signup')});
+
+  document.querySelectorAll('input[name="signupRole"]').forEach(function(radio){
+    radio.addEventListener('change',refreshSignupRoleUI);
+  });
+  refreshSignupRoleUI();
+
+  [loginUsername,signupUsername].forEach(function(input){
+    input.addEventListener('input',function(){
+      input.value=normalizeUsername(input.value);
+    });
+  });
+
+  document.querySelectorAll('.togglePass').forEach(function(btn){
+    btn.addEventListener('click',function(){
+      const target=document.getElementById(btn.dataset.target);
+      if(!target)return;
+      const show=target.type==='password';
+      target.type=show?'text':'password';
+      btn.textContent=show?'◎':'◉';
+      btn.setAttribute('aria-label',show?'Sembunyikan password':'Tampilkan password');
+    });
+  });
+
+  try{
+    window.NCTSupabase.assertConfigured();
+    const existing=await window.NCTSupabase.getCurrentContext();
+    if(existing){window.location.replace('./dashboard.html');return;}
+  }catch(err){
+    setMessage(err.message||String(err));
+  }
+
+  loginForm.addEventListener('submit',async function(e){
+    e.preventDefault();
+    setMessage('');
+    loginSubmit.disabled=true;
+    loginSubmit.textContent='Memeriksa akun...';
+    try{
+      window.NCTSupabase.assertConfigured();
+      const username=normalizeUsername(loginUsername.value);
+      if(!validateUsername(username)) throw new Error('Format username tidak valid. Contoh: admin.001');
+      const {error}=await window.NCTSupabase.client.auth.signInWithPassword({
+        email:internalEmail(username),
+        password:loginPassword.value
+      });
+      if(error) throw error;
+      const context=await window.NCTSupabase.getCurrentContext();
+      if(!context) throw new Error('Akun berhasil masuk, tetapi profile/role belum tersedia.');
+      if(!['admin','viewer'].includes(String(context.profile.role||'').toLowerCase())) throw new Error('Role akun belum valid.');
+      setMessage('Login berhasil. Membuka dashboard...',true);
+      window.location.replace('./dashboard.html');
+    }catch(err){
+      console.error(err);
+      const raw=String(err?.message||'');
+      const friendly=/invalid login credentials/i.test(raw)?'Username atau password salah.':(raw||'Login gagal.');
+      setMessage(friendly);
+      try{await window.NCTSupabase.client.auth.signOut()}catch(_){ }
+      loginPassword.value='';
+      loginPassword.focus();
+      loginSubmit.disabled=false;
+      loginSubmit.textContent='Masuk ke Dashboard';
+    }
+  });
+
+  signupForm.addEventListener('submit',async function(e){
+    e.preventDefault();
+    setMessage('');
+    signupSubmit.disabled=true;
+    signupSubmit.textContent='Membuat akun...';
+    try{
+      window.NCTSupabase.assertConfigured();
+      const username=normalizeUsername(signupUsername.value);
+      const name=String(signupName.value||'').trim();
+      const pass=signupPassword.value;
+      const pass2=signupPassword2.value;
+      const requestedRole=selectedSignupRole();
+
+      if(!validateUsername(username)) throw new Error('Username harus 3–32 karakter dan hanya boleh berisi huruf kecil, angka, titik, underscore, atau tanda minus.');
+      if(name.length<2) throw new Error('Nama tampilan minimal 2 karakter.');
+      if(pass.length<8) throw new Error('Password minimal 8 karakter.');
+      if(pass!==pass2) throw new Error('Ulangi password harus sama.');
+
+      const {data,error}=await window.NCTSupabase.client.auth.signUp({
+        email:internalEmail(username),
+        password:pass,
+        options:{data:{username:username,name:name,requested_role:requestedRole}}
+      });
+      if(error) throw error;
+
+      if(!data || !data.user) throw new Error('Pendaftaran gagal membuat user.');
+      if(!data.session){
+        setMessage('Akun sudah dibuat, tetapi belum bisa login otomatis. Pastikan Confirm email di Supabase dimatikan untuk sistem username internal ini.',false);
+        signupSubmit.disabled=false;
+        refreshSignupRoleUI();
+        return;
+      }
+
+      const context=await window.NCTSupabase.getCurrentContext();
+      if(!context) throw new Error('Akun berhasil dibuat, tetapi profile belum tersedia. Jalankan file supabase-admin-approval.sql.');
+      if(String(context.profile.role||'').toLowerCase()!=='viewer') throw new Error('Role awal akun baru tidak aman. Hubungi pengelola.');
+
+      const status=String(context.profile.approval_status||'approved').toLowerCase();
+      const requested=String(context.profile.requested_role||'viewer').toLowerCase();
+      if(requestedRole==='admin' && (requested!=='admin' || status!=='pending')){
+        throw new Error('Permintaan Admin belum tercatat dengan benar. Jalankan file supabase-admin-approval.sql.');
+      }
+
+      if(requestedRole==='admin'){
+        setMessage('Pendaftaran berhasil. Permintaan Admin sudah dikirim. Sementara akun masuk sebagai Viewer sampai disetujui Admin aktif.',true);
+      }else{
+        setMessage('Pendaftaran Viewer berhasil. Dashboard sedang dibuka...',true);
+      }
+      setTimeout(function(){window.location.replace('./dashboard.html');},650);
+    }catch(err){
+      console.error(err);
+      const raw=String(err?.message||'');
+      let friendly=raw||'Pendaftaran gagal.';
+      if(/already registered|already been registered|user.*exists/i.test(raw)) friendly='Username tersebut sudah terdaftar. Silakan pilih username lain.';
+      if(/signup.*disabled|signups.*disabled/i.test(raw)) friendly='Pendaftaran user masih dimatikan di Supabase. Aktifkan Allow new users to sign up.';
+      setMessage(friendly);
+      signupSubmit.disabled=false;
+      refreshSignupRoleUI();
+    }
+  });
+
+  setMode('login');
+})();
+</script>
+</body>
+</html>
