@@ -1,0 +1,124 @@
+/* ROLE + PRESENCE V1 */
+
+/* QC Inspector: di SYSTEM hanya Backup Data yang terlihat. */
+body.role-qc-inspector #sideDatabase,
+body.role-qc-inspector #sideSettings{
+  display:none!important;
+}
+
+/* Guest Internal & Eksternal: seluruh SYSTEM hilang. */
+body.role-guest-internal .sidebarSystemLabel,
+body.role-guest-internal #sideDatabase,
+body.role-guest-internal #sideBackup,
+body.role-guest-internal #sideSettings,
+body.role-guest-external .sidebarSystemLabel,
+body.role-guest-external #sideDatabase,
+body.role-guest-external #sideBackup,
+body.role-guest-external #sideSettings{
+  display:none!important;
+}
+
+/* Guest Internal tetap boleh melihat menu Tembakau. */
+body.role-guest-internal #sideStock{
+  display:flex!important;
+}
+
+/* Guest Eksternal tidak melihat menu Tembakau. */
+body.role-guest-external #sideStock{
+  display:none!important;
+}
+
+/* Role badge variations. */
+body.role-qc-inspector #nctRoleBadge{
+  border-color:#54d4bd!important;
+  background:#173c39!important;
+  color:#84ead7!important;
+}
+body.role-guest-internal #nctRoleBadge{
+  border-color:#7180c7!important;
+  background:#242a58!important;
+  color:#c4ccff!important;
+}
+body.role-guest-external #nctRoleBadge{
+  border-color:#9d79c5!important;
+  background:#33264b!important;
+  color:#ddc4f7!important;
+}
+
+/* Topbar online count. */
+.nctOnlineBadge{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  flex:0 0 auto;
+  min-height:24px;
+  padding:3px 7px;
+  border:1px solid rgba(85,213,176,.38);
+  border-radius:999px;
+  background:rgba(25,88,71,.24);
+  color:#7ee5c4;
+  font-size:7px;
+  font-weight:1000;
+  letter-spacing:.55px;
+  cursor:default;
+}
+.nctOnlineBadge::before{
+  content:"";
+  width:6px;height:6px;border-radius:50%;
+  background:#5be5b7;
+  box-shadow:0 0 10px rgba(91,229,183,.65);
+}
+
+/* User list Online/Offline badge. */
+.masterPresenceBadge{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  width:max-content;
+  margin-top:5px;
+  padding:3px 7px;
+  border-radius:999px;
+  font-size:7px;
+  font-weight:1000;
+  letter-spacing:.55px;
+}
+.masterPresenceBadge i{
+  width:6px;height:6px;border-radius:50%;
+}
+.masterPresenceBadge.online{
+  color:#7ee5c4;
+  border:1px solid rgba(85,213,176,.35);
+  background:rgba(28,103,82,.20);
+}
+.masterPresenceBadge.online i{
+  background:#5be5b7;
+  box-shadow:0 0 8px rgba(91,229,183,.60);
+}
+.masterPresenceBadge.offline{
+  color:#8690a6;
+  border:1px solid rgba(119,130,158,.25);
+  background:rgba(70,78,101,.16);
+}
+.masterPresenceBadge.offline i{background:#70798e}
+
+/* Optional notice when more than one writer is online. */
+.nctWriterNotice{
+  position:fixed;
+  right:14px;
+  bottom:14px;
+  z-index:10020;
+  max-width:310px;
+  padding:9px 11px;
+  border:1px solid rgba(255,191,91,.38);
+  border-radius:10px;
+  background:rgba(55,39,20,.94);
+  color:#f6cf8f;
+  box-shadow:0 12px 30px rgba(0,0,0,.28);
+  font-size:8px;
+  line-height:1.45;
+  font-weight:800;
+}
+@media(max-width:600px){
+  .nctOnlineBadge{font-size:6px;padding:3px 5px}
+  .nctWriterNotice{left:8px;right:8px;bottom:8px;max-width:none}
+}
