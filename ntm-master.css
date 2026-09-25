@@ -1,0 +1,108 @@
+/* =========================================================
+   MASTER NTM + DYNAMIC NTM UI
+   ========================================================= */
+
+#settings .masterNtmCard{
+  position:relative;
+  overflow:hidden;
+}
+#settings .masterNtmCard::before{
+  content:"";
+  position:absolute;
+  inset:0 auto auto 0;
+  width:100%;
+  height:3px;
+  background:linear-gradient(90deg,#5fcdf8,#77e0c1,#a58cff);
+  opacity:.85;
+}
+#settings .masterNtmCard .masterCardIcon{
+  color:#72d6d0;
+}
+#settings .masterNtmUnitBadge{
+  display:inline-flex;
+  align-items:center;
+  min-height:19px;
+  padding:2px 7px;
+  margin-top:5px;
+  border:1px solid rgba(91,199,191,.30);
+  border-radius:999px;
+  background:rgba(30,100,98,.16);
+  color:#8be2d6;
+  font-size:7px;
+  font-weight:900;
+  letter-spacing:.45px;
+}
+#settings .masterNtmSystemBadge{
+  display:inline-flex;
+  align-items:center;
+  min-height:19px;
+  padding:2px 7px;
+  margin:5px 0 0 5px;
+  border:1px solid rgba(105,166,230,.32);
+  border-radius:999px;
+  background:rgba(38,73,122,.18);
+  color:#9ccaff;
+  font-size:7px;
+  font-weight:900;
+  letter-spacing:.45px;
+}
+#settings .masterNtmDelete{
+  border:0;
+  background:transparent;
+  color:#f65f7f;
+  font-size:9px;
+  font-weight:800;
+  cursor:pointer;
+}
+#settings .masterNtmDelete:hover{color:#ff9aae}
+#settings .masterNtmDelete:disabled{
+  color:#665d6c;
+  cursor:not-allowed;
+}
+#settings .masterNtmColorDot{
+  width:8px;
+  height:8px;
+  display:inline-block;
+  margin-right:6px;
+  border-radius:50%;
+  box-shadow:0 0 10px currentColor;
+}
+
+/* Dynamic NTM cards: jumlah kolom mengikuti jumlah master aktif. */
+.wasteNtmCard .ntmSummaryGrid{
+  grid-template-columns:repeat(auto-fit,minmax(205px,1fr))!important;
+}
+
+/* Newly generated cards still use the original visual system. */
+.ntmMaterialCard[data-dynamic-ntm="1"]{
+  --ntm-accent:#62c8ff;
+  --ntm-accent-rgb:98,200,255;
+}
+.ntmMaterialCard[data-dynamic-ntm="1"] .ntmMetricRow:last-of-type b{
+  color:var(--ntm-accent)!important;
+}
+
+/* Dynamic history choice chips. */
+#wasteNtmChoices .wasteChoiceBtn{
+  transition:transform .17s ease,filter .17s ease,border-color .17s ease,box-shadow .17s ease;
+}
+#wasteNtmChoices .wasteChoiceBtn:hover{
+  transform:translateY(-1px);
+  filter:brightness(1.08);
+}
+
+/* Master modal NTM */
+#masterNtmModal .masterNtmFormGrid{
+  display:grid;
+  grid-template-columns:1.3fr .7fr;
+  gap:11px;
+}
+#masterNtmModal .masterNtmCodePreview{
+  margin-top:6px;
+  color:#776d82;
+  font-size:8px;
+  font-weight:800;
+}
+@media(max-width:620px){
+  #masterNtmModal .masterNtmFormGrid{grid-template-columns:1fr}
+}
