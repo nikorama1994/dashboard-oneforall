@@ -215,7 +215,6 @@
   async function refreshModule(module,quiet){
     try{
       await window.NCTSupabase.refreshOperationalModule(module);
-      applyPendingOverlay(module);
       updateRuntimeFromCaches(module);
       if(!quiet)showNotice('Data '+module+' sudah disinkronkan dengan Supabase.','ok');
       return true;
@@ -389,75 +388,6 @@
     return loadPending().some(op=>op.module===module);
   }
 
-
-  // Pending write disimpan di localStorage kecil (bukan database besar). Saat page
-  // direfresh sebelum Supabase selesai menerima write, overlay ini menampilkan
-  // kembali perubahan pending di atas snapshot server sehingga input user tidak
-  // tampak hilang. Begitu RPC sukses, pending dihapus dan server tetap source of truth.
-  function applyPendingOverlay(module){
-    module=String(module||'');
-    const pending=loadPending().filter(op=>String(op?.module||'')===module);
-    if(!pending.length)return false;
-
-    const cacheKey=Object.keys(cacheToModule).find(k=>cacheToModule[k]===module);
-    if(!cacheKey)return false;
-
-    let next;
-    if(module==='initial_stock'){
-      const obj=safeJson(localStorage.getItem(cacheKey),{});
-      next=(obj && typeof obj==='object' && !Array.isArray(obj))?{...obj}:{};
-      pending.forEach(function(op){
-        const brand=String(op?.payload?.brand||op?.recordKey||'').trim();
-        if(!brand)return;
-        if(op.action==='delete')delete next[brand];
-        else next[brand]=op?.payload?.value;
-      });
-    }else{
-      const arr=safeJson(localStorage.getItem(cacheKey),[]);
-      const map=new Map();
-      (Array.isArray(arr)?arr:[]).forEach(function(row){
-        const key=rowKey(module,row);
-        if(key)map.set(String(key),cleanPayload(row));
-      });
-      pending.forEach(function(op){
-        const key=String(op?.recordKey||'');
-        if(!key)return;
-        if(op.action==='delete')map.delete(key);
-        else map.set(key,cleanPayload(op?.payload||{}));
-      });
-      next=[...map.values()];
-    }
-
-    window.__NCT_OPERATIONAL_APPLYING=(window.__NCT_OPERATIONAL_APPLYING||0)+1;
-    try{nativeSet.call(localStorage,cacheKey,JSON.stringify(next))}
-    finally{window.__NCT_OPERATIONAL_APPLYING=Math.max(0,(window.__NCT_OPERATIONAL_APPLYING||1)-1)}
-    return true;
-  }
-
-  // Dipakai form untuk memastikan label "tersimpan" hanya diberikan sesudah
-  // write benar-benar diterima Supabase. Bila masih pending, caller mendapat error.
-  async function flushModule(module,timeoutMs){
-    module=String(module||'');
-    timeoutMs=Math.max(1500,Number(timeoutMs)||10000);
-    await new Promise(r=>setTimeout(r,0)); // beri diffAndQueue kesempatan masuk queue
-    await retryPending();
-
-    const deadline=Date.now()+timeoutMs;
-    while(Date.now()<deadline){
-      const pending=loadPending().filter(op=>String(op?.module||'')===module);
-      if(!pending.length && (modulePending.get(module)||0)===0)return true;
-      await new Promise(r=>setTimeout(r,120));
-    }
-
-    const left=loadPending().filter(op=>String(op?.module||'')===module).length;
-    const err=new Error(left
-      ? ('Masih ada '+left+' perubahan '+module+' yang belum tersimpan ke Supabase.')
-      : ('Sinkronisasi '+module+' belum selesai.'));
-    err.code='NCT_SYNC_PENDING';
-    err.pendingCount=left;
-    throw err;
-  }
-
   function startRealtime(context){
     if(!window.NCTSupabase?.subscribeOperationalChanges)return;
 
@@ -517,8 +447,6 @@
     window.NCTMultiEditor={
       refreshModule:refreshModule,
       retryPending:retryPending,
-      flushModule:flushModule,
-      applyPendingOverlay:applyPendingOverlay,
       pending:function(){return loadPending()},
       conflicts:function(){return safeJson(localStorage.getItem(CONFLICT_KEY),[])||[]}
     };

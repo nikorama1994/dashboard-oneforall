@@ -751,10 +751,134 @@
     };
   }
 
+
+  // V63 UNIFIED DATABASE PERSISTENCE:
+  // Satu jalur atomik untuk semua database besar yang disimpan di operational_records.
+  // Client mengirim record_key + payload; backend melakukan replace dalam satu transaksi,
+  // menjaga input manual pada key yang sama, lalu client membaca ulang server untuk verifikasi.
+  async function replaceOperationalDataset(module,records,options){
+    options=options||{};
+    module=String(module||'');
+    if(!OPERATIONAL_MODULES.includes(module))throw new Error('Module operasional tidak valid.');
+
+    const sourceTag=String(options.sourceTag||'DATABASE_UPLOAD').toUpperCase();
+    const onProgress=typeof options.onProgress==='function'?options.onProgress:null;
+    const incoming=(Array.isArray(records)?records:[]).filter(Boolean);
+    if(!incoming.length)throw new Error('Tidak ada record valid untuk disimpan.');
+
+    const context=await getCurrentContext();
+    if(!context)throw new Error('Sesi login tidak ditemukan.');
+    const role=String(context.profile.role||'').toLowerCase();
+    if(!['admin','qc_inspector'].includes(role)){
+      throw new Error('Hanya Admin atau QC Inspector yang boleh upload database.');
+    }
+
+    const expectedByKey=new Map();
+    incoming.forEach(function(payload){
+      const copy={...(payload||{}),databaseUploadSource:sourceTag};
+      const key=operationalRecordKey(module,copy);
+      if(key)expectedByKey.set(String(key),copy);
+    });
+    if(!expectedByKey.size)throw new Error('Tidak ada record dengan key valid untuk disimpan.');
+
+    if(onProgress){
+      try{onProgress({module,sourceTag,phase:'save',total:expectedByKey.size,completed:0,saved:0,deleted:0})}catch(_){ }
+    }
+
+    const rpcRecords=Array.from(expectedByKey.entries()).map(function(entry){
+      return {record_key:entry[0],payload:entry[1]};
+    });
+
+    const sb=getClient();
+    let rpcData=null;
+    let rpcError=null;
+    try{
+      const result=await sb.rpc('replace_operational_upload_v63',{
+        p_module:module,
+        p_records:rpcRecords,
+        p_source_tag:sourceTag
+      });
+      rpcData=result.data;
+      rpcError=result.error;
+    }catch(err){
+      rpcError=err;
+    }
+
+    if(rpcError){
+      const msg=String(rpcError?.message||rpcError||'');
+      const missingRpc=/replace_operational_upload_v63|PGRST202|Could not find the function/i.test(msg);
+      if(missingRpc){
+        throw new Error(
+          'Backend V63 belum terpasang di Supabase. Jalankan FIX-V63-UNIFIED-PERSISTENCE.sql sekali, lalu upload ulang.'
+        );
+      }
+      throw rpcError;
+    }
+
+    const stats=(rpcData&&typeof rpcData==='object'&&!Array.isArray(rpcData))?rpcData:{};
+
+    // Server read-back is mandatory: "sukses" tidak boleh hanya berdasarkan response RPC.
+    const finalRows=await fetchOperationalModule(module);
+    recordsToLocalCache(module,finalRows);
+
+    const finalByKey=new Map((finalRows||[]).map(function(row){
+      return [String(row?.record_key||''),row];
+    }));
+    let confirmed=0;
+    const acceptedKeys=[];
+    expectedByKey.forEach(function(_,key){
+      const row=finalByKey.get(key);
+      if(!row)return;
+      confirmed++;
+      const payload=row?.payload||{};
+      const owned=String(payload.databaseUploadSource||'').toUpperCase()===sourceTag ||
+        (module==='production' && (
+          String(payload.productionSource||'').toUpperCase()==='EXCEL' ||
+          payload.ambriExcelSource===true
+        ));
+      if(owned)acceptedKeys.push(key);
+    });
+
+    if(confirmed!==expectedByKey.size){
+      throw new Error(
+        'Verifikasi Supabase gagal untuk '+module+': hanya '+
+        confirmed+' dari '+expectedByKey.size+
+        ' record ditemukan kembali di server.'
+      );
+    }
+
+    try{sessionStorage.setItem('nct_remote_updated_at',new Date().toISOString())}catch(_){ }
+    if(onProgress){
+      try{onProgress({
+        module,sourceTag,phase:'done',
+        total:expectedByKey.size,completed:expectedByKey.size,
+        saved:Number(stats.saved??acceptedKeys.length),
+        deleted:Number(stats.deleted||0),
+        manualCollision:Number(stats.manualCollision||0),
+        conflictRetries:0
+      })}catch(_){ }
+    }
+
+    return {
+      saved:Number(stats.saved??acceptedKeys.length),
+      deleted:Number(stats.deleted||0),
+      manualCollision:Number(stats.manualCollision||0),
+      conflictRetries:0,
+      concurrentManualPreserved:0,
+      acceptedKeys,
+      confirmed,
+      serverCount:Number(stats.serverCount??finalRows.length),
+      uploadCount:Number(stats.uploadCount??acceptedKeys.length),
+      rows:finalRows,
+      atomic:true,
+      backend:'replace_operational_upload_v63'
+    };
+  }
+
   async function replaceProductionUpload(records,options){
     options=options||{};
     const sourceTag=String(options.sourceTag||'GILING_GUNTING').toUpperCase();
-    return replaceOperationalUpload('production',records,Object.assign({},options,{
+    return replaceOperationalDataset('production',records,Object.assign({},options,{
       sourceTag,
       poolLimit:Number(options.poolLimit)||6,
       isUploadPayload:function(payload){
@@ -769,7 +893,7 @@
   async function replaceQualityGilingUpload(records,options){
     options=options||{};
     const sourceTag=String(options.sourceTag||'QUALITY_GILING_GUNTING').toUpperCase();
-    return replaceOperationalUpload('quality_giling',records,Object.assign({},options,{
+    return replaceOperationalDataset('quality_giling',records,Object.assign({},options,{
       sourceTag,
       poolLimit:Number(options.poolLimit)||6,
       isUploadPayload:function(payload){
@@ -1212,6 +1336,7 @@
     saveOperationalRecord,
     deleteOperationalRecord,
     replaceOperationalUpload,
+    replaceOperationalDataset,
     replaceProductionUpload,
     replaceQualityGilingUpload,
     purgeUploadedDatabaseData,

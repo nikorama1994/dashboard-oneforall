@@ -2,7 +2,7 @@
 
 <html lang="id">
 <head>
-<meta name="nct-dashboard-version" content="61">
+<meta name="nct-dashboard-version" content="63">
 <script id="nct-supabase-first-memory-store-v43">
 (function(){
   'use strict';
@@ -359,7 +359,7 @@ document.documentElement.classList.add('nct-auth-pending');
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="./supabase-config.js"></script>
-<script src="./supabase-api.js?v=20260929v61"></script>
+<script src="./supabase-api.js?v=20260929v63"></script>
 
 <script id="nct-supabase-extra-state-v27">
 (function(){
@@ -838,6 +838,24 @@ document.documentElement.classList.add('nct-auth-pending');
     return true;
   }
 
+  async function verifyStore(cfg){
+    const localValue=localStorage.getItem(cfg.key);
+    const remote=await fetchValue(cfg);
+    if(!remote?.exists){
+      throw new Error('Verifikasi Supabase gagal: '+cfg.key+' belum ditemukan di server.');
+    }
+    const localText=localValue===null?'':String(localValue);
+    const remoteText=remote.value===null||remote.value===undefined?'':String(remote.value);
+    if(localText!==remoteText){
+      throw new Error(
+        'Verifikasi Supabase gagal: '+cfg.key+
+        ' berbeda antara browser dan server ('+
+        localText.length+' vs '+remoteText.length+' karakter).'
+      );
+    }
+    return {key:cfg.key,length:localText.length,updatedAt:String(remote.row?.updated_at||'')};
+  }
+
   async function replaceStore(key){
     const cfg=byKey.get(String(key||''));
     if(!cfg)throw new Error('Store Supabase tidak dikenal: '+String(key||''));
@@ -845,28 +863,29 @@ document.documentElement.classList.add('nct-auth-pending');
     timers.delete(cfg.key);
     showState('MENGGANTI DATA...',false);
 
-    // V50 SAFE REPLACE: tulis snapshot BARU terlebih dahulu. saveState membuat
-    // chunk/token baru lalu menukar manifest sebagai langkah terakhir; chunk lama
-    // dibersihkan sesudahnya. Jadi upload baru benar-benar mengganti dataset lama
-    // tanpa jendela waktu ketika database server kosong.
+    // V63 VERIFIED REPLACE: snapshot baru ditulis, manifest ditukar terakhir,
+    // lalu WAJIB dibaca ulang dari Supabase dan dibandingkan byte-for-byte.
+    // UI tidak boleh mengaku "tersimpan" bila read-back server belum identik.
     const ok=await saveState(cfg);
     if(!ok)throw new Error('Store '+cfg.key+' belum tersimpan ke Supabase.');
-    return true;
+    return await verifyStore(cfg);
   }
 
   async function replaceStores(keys,options){
     options=options||{};
     const onProgress=typeof options.onProgress==='function'?options.onProgress:null;
     const list=[...new Set((Array.isArray(keys)?keys:[]).map(String).filter(Boolean))];
+    const verified=[];
     let completed=0;
     for(const key of list){
-      await replaceStore(key);
+      const check=await replaceStore(key);
+      verified.push(check);
       completed++;
-      try{onProgress&&onProgress({phase:'save',key,completed,total:list.length})}catch(_){ }
+      try{onProgress&&onProgress({phase:'verify',key,completed,total:list.length,verified:check})}catch(_){ }
     }
     showState('TERSIMPAN',false);
-    try{onProgress&&onProgress({phase:'done',completed:list.length,total:list.length})}catch(_){ }
-    return true;
+    try{onProgress&&onProgress({phase:'done',completed:list.length,total:list.length,verified})}catch(_){ }
+    return {ok:true,verified};
   }
 
   async function flushStores(keys){
@@ -20177,7 +20196,7 @@ function handleDatabaseExcelUpload(event){
       recalcStocks();
 
       if(!window.NCTSupabase || typeof window.NCTSupabase.replaceProductionUpload!=="function"){
-        throw new Error("Supabase API V48 belum aktif. Hard refresh lalu coba lagi.");
+        throw new Error("Supabase API V63 belum aktif. Upload supabase-api.js V63, jalankan SQL V63, lalu hard refresh dan coba lagi.");
       }
 
       const uploadRows=data.filter(function(r){
@@ -49812,7 +49831,7 @@ body.role-viewer .adminAccessPage{display:none!important}
 
         const uploadRows=Array.from(incoming.values()).map(compactQualityRecord);
         if(!window.NCTSupabase?.replaceQualityGilingUpload){
-          throw new Error('Supabase API V50 belum aktif. Replace supabase-api.js lalu hard refresh.');
+          throw new Error('Supabase API V63 belum aktif. Replace supabase-api.js V63, jalankan SQL V63, lalu hard refresh.');
         }
 
         setStatus('Data Quality terbaca. Mengganti database Quality lama di Supabase ...','');
