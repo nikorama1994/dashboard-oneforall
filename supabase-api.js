@@ -781,70 +781,128 @@
     });
     if(!expectedByKey.size)throw new Error('Tidak ada record dengan key valid untuk disimpan.');
 
-    if(onProgress){
-      try{onProgress({module,sourceTag,phase:'save',total:expectedByKey.size,completed:0,saved:0,deleted:0})}catch(_){ }
-    }
+    const uploadId=(function(){
+      try{
+        if(globalThis.crypto?.randomUUID)return globalThis.crypto.randomUUID();
+      }catch(_){ }
+      return 'v64-'+Date.now()+'-'+Math.random().toString(36).slice(2,10);
+    })();
 
     const rpcRecords=Array.from(expectedByKey.entries()).map(function(entry){
       return {record_key:entry[0],payload:entry[1]};
     });
 
+    // V64: jangan kirim ribuan record dalam satu statement. Quality 8k+ pernah
+    // timeout pada V63. Semua module memakai jalur chunk universal yang sama.
+    const chunkSize=Math.max(50,Math.min(500,Number(options.chunkSize)||250));
+    const maxParallel=Math.max(1,Math.min(4,Number(options.poolLimit)||3));
+    const chunks=[];
+    for(let i=0;i<rpcRecords.length;i+=chunkSize)chunks.push(rpcRecords.slice(i,i+chunkSize));
+
+    if(onProgress){
+      try{onProgress({module,sourceTag,phase:'save',total:expectedByKey.size,completed:0,saved:0,deleted:0,chunks:chunks.length})}catch(_){ }
+    }
+
     const sb=getClient();
-    let rpcData=null;
-    let rpcError=null;
-    try{
-      const result=await sb.rpc('replace_operational_upload_v63',{
-        p_module:module,
-        p_records:rpcRecords,
-        p_source_tag:sourceTag
-      });
-      rpcData=result.data;
-      rpcError=result.error;
-    }catch(err){
-      rpcError=err;
-    }
+    let nextIndex=0;
+    let completed=0;
+    let saved=0;
+    let manualCollision=0;
+    let accepted=0;
 
-    if(rpcError){
-      const msg=String(rpcError?.message||rpcError||'');
-      const missingRpc=/replace_operational_upload_v63|PGRST202|Could not find the function/i.test(msg);
-      if(missingRpc){
-        throw new Error(
-          'Backend V63 belum terpasang di Supabase. Jalankan FIX-V63-UNIFIED-PERSISTENCE.sql sekali, lalu upload ulang.'
-        );
+    function normalizeRpcError(err){
+      const msg=String(err?.message||err||'');
+      const missing=/upsert_operational_upload_chunk_v64|finalize_operational_upload_v64|PGRST202|Could not find the function/i.test(msg);
+      if(missing){
+        return new Error('Backend V64 belum terpasang di Supabase. Jalankan FIX-V64-UNIFIED-CHUNKED-PERSISTENCE.sql sekali, lalu upload ulang.');
       }
-      throw rpcError;
+      return err instanceof Error?err:new Error(msg||'Upload chunk V64 gagal.');
     }
 
-    const stats=(rpcData&&typeof rpcData==='object'&&!Array.isArray(rpcData))?rpcData:{};
+    async function uploadChunk(chunk){
+      let result;
+      try{
+        result=await sb.rpc('upsert_operational_upload_chunk_v64',{
+          p_module:module,
+          p_records:chunk,
+          p_source_tag:sourceTag,
+          p_upload_id:uploadId
+        });
+      }catch(err){
+        throw normalizeRpcError(err);
+      }
+      if(result?.error)throw normalizeRpcError(result.error);
+      const stats=(result?.data&&typeof result.data==='object'&&!Array.isArray(result.data))?result.data:{};
+      saved+=Number(stats.saved||0);
+      manualCollision+=Number(stats.manualCollision||0);
+      accepted+=Number(stats.accepted||0);
+      completed+=chunk.length;
+      if(onProgress){
+        try{onProgress({module,sourceTag,phase:'save',total:expectedByKey.size,completed,saved,deleted:0,chunks:chunks.length})}catch(_){ }
+      }
+    }
 
-    // Server read-back is mandatory: "sukses" tidak boleh hanya berdasarkan response RPC.
-    const finalRows=await fetchOperationalModule(module);
-    recordsToLocalCache(module,finalRows);
+    async function worker(){
+      while(true){
+        const idx=nextIndex++;
+        if(idx>=chunks.length)return;
+        await uploadChunk(chunks[idx]);
+      }
+    }
 
-    const finalByKey=new Map((finalRows||[]).map(function(row){
-      return [String(row?.record_key||''),row];
-    }));
-    let confirmed=0;
-    const acceptedKeys=[];
-    expectedByKey.forEach(function(_,key){
-      const row=finalByKey.get(key);
-      if(!row)return;
-      confirmed++;
-      const payload=row?.payload||{};
-      const owned=String(payload.databaseUploadSource||'').toUpperCase()===sourceTag ||
-        (module==='production' && (
-          String(payload.productionSource||'').toUpperCase()==='EXCEL' ||
-          payload.ambriExcelSource===true
-        ));
-      if(owned)acceptedKeys.push(key);
-    });
+    await Promise.all(Array.from({length:Math.min(maxParallel,chunks.length)},worker));
 
-    if(confirmed!==expectedByKey.size){
+    // Hanya setelah seluruh chunk sukses, record upload lama dibersihkan.
+    let finalizeResult;
+    try{
+      finalizeResult=await sb.rpc('finalize_operational_upload_v64',{
+        p_module:module,
+        p_source_tag:sourceTag,
+        p_upload_id:uploadId,
+        p_expected_count:expectedByKey.size
+      });
+    }catch(err){
+      throw normalizeRpcError(err);
+    }
+    if(finalizeResult?.error)throw normalizeRpcError(finalizeResult.error);
+    const finalStats=(finalizeResult?.data&&typeof finalizeResult.data==='object'&&!Array.isArray(finalizeResult.data))?finalizeResult.data:{};
+    const uploadCount=Number(finalStats.uploadCount||0);
+    const deleted=Number(finalStats.deleted||0);
+    const serverCount=Number(finalStats.serverCount||0);
+
+    // Server-side verification tanpa perlu menunggu download ulang 8k+ row.
+    if(uploadCount+manualCollision!==expectedByKey.size){
       throw new Error(
-        'Verifikasi Supabase gagal untuk '+module+': hanya '+
-        confirmed+' dari '+expectedByKey.size+
-        ' record ditemukan kembali di server.'
+        'Verifikasi Supabase V64 gagal untuk '+module+': '+
+        uploadCount+' record upload + '+manualCollision+' konflik manual dari '+
+        expectedByKey.size+' record.'
       );
+    }
+
+    let finalRows=[];
+    if(manualCollision>0){
+      // Bila ada key manual yang harus dipertahankan, baca ulang agar cache lokal
+      // persis sama dengan server.
+      finalRows=await fetchOperationalModule(module);
+      recordsToLocalCache(module,finalRows);
+    }else{
+      // Kasus umum database upload: server sudah memverifikasi seluruh batch.
+      // Materialisasikan payload upload langsung agar UI tidak menunggu download
+      // ulang ribuan row, lalu revalidate penuh di background.
+      const now=new Date().toISOString();
+      finalRows=Array.from(expectedByKey.entries()).map(function(entry){
+        const payload={...entry[1],databaseUploadBatchId:uploadId};
+        return {module,record_key:entry[0],payload,version:1,updated_at:now};
+      });
+      recordsToLocalCache(module,finalRows);
+      Promise.resolve().then(async function(){
+        try{
+          const remote=await fetchOperationalModule(module);
+          recordsToLocalCache(module,remote);
+        }catch(err){
+          console.warn('[NCT V64] background read-back gagal:',module,err);
+        }
+      });
     }
 
     try{sessionStorage.setItem('nct_remote_updated_at',new Date().toISOString())}catch(_){ }
@@ -852,26 +910,27 @@
       try{onProgress({
         module,sourceTag,phase:'done',
         total:expectedByKey.size,completed:expectedByKey.size,
-        saved:Number(stats.saved??acceptedKeys.length),
-        deleted:Number(stats.deleted||0),
-        manualCollision:Number(stats.manualCollision||0),
-        conflictRetries:0
+        saved:uploadCount,deleted,manualCollision,conflictRetries:0
       })}catch(_){ }
     }
 
     return {
-      saved:Number(stats.saved??acceptedKeys.length),
-      deleted:Number(stats.deleted||0),
-      manualCollision:Number(stats.manualCollision||0),
+      saved:uploadCount,
+      deleted,
+      manualCollision,
       conflictRetries:0,
-      concurrentManualPreserved:0,
-      acceptedKeys,
-      confirmed,
-      serverCount:Number(stats.serverCount??finalRows.length),
-      uploadCount:Number(stats.uploadCount??acceptedKeys.length),
+      concurrentManualPreserved:manualCollision,
+      acceptedKeys:Array.from(expectedByKey.keys()),
+      confirmed:uploadCount,
+      serverCount,
+      uploadCount,
       rows:finalRows,
-      atomic:true,
-      backend:'replace_operational_upload_v63'
+      atomic:false,
+      chunked:true,
+      chunkSize,
+      chunks:chunks.length,
+      uploadId,
+      backend:'v64_chunked_persistence'
     };
   }
 
@@ -988,18 +1047,40 @@
 
     const role=String(context.profile.role||'').toLowerCase();
 
-    // V61 stale-while-revalidate. Snapshot IndexedDB sudah dimuat ke RAM oleh
-    // auth guard; gunakan langsung agar halaman muncul seketika. Cek server kecil
-    // berjalan background. Full download hanya bila count/updated_at berubah.
+    // V65 stale-while-revalidate yang aman terhadap cache kosong/stale.
+    // Bug lama: snapshot IndexedDB berisi [] pernah dianggap cache valid. Setelah
+    // logout/login UI langsung membaca 0 DATA lalu hanya revalidate di background.
+    // Untuk cache kosong, cek fingerprint server secara sinkron (query kecil). Bila
+    // server punya record, full hydration WAJIB ditunggu sebelum module dianggap load.
     const awaited=[];
     for(const module of requested){
       const cacheKey=OPERATIONAL_CACHE_KEYS[module];
       const hasPersistent=!!window.NCTPersistentCache?.has?.(cacheKey) && operationalCacheLooksPresent(module);
       if(hasPersistent){
-        result[module]=localCacheToRecords(module,false);
-        revalidateOperationalModule(module).catch(function(err){
-          console.warn('Background operational revalidation skipped:',module,err);
-        });
+        const localRows=localCacheToRecords(module,false);
+        if(localRows.length){
+          result[module]=localRows;
+          revalidateOperationalModule(module).catch(function(err){
+            console.warn('Background operational revalidation skipped:',module,err);
+          });
+          continue;
+        }
+
+        // Snapshot persisten ada tetapi kosong. Jangan percaya cache kosong sebelum
+        // memastikan server juga kosong. Ini menjaga production / quality tetap muncul
+        // segera setelah logout-login pada device yang pernah menyimpan snapshot kosong.
+        const job=(async function(){
+          const fp=await fetchOperationalFingerprint(module);
+          if(Number(fp.count)>0){
+            const rows=await fetchOperationalModule(module);
+            recordsToLocalCache(module,rows);
+            result[module]=rows;
+            return;
+          }
+          recordsToLocalCache(module,[]);
+          result[module]=[];
+        })();
+        awaited.push(job);
         continue;
       }
 

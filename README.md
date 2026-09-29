@@ -1,14 +1,8 @@
-# Dashboard OneForAll — V62
+# Dashboard OneForAll V65
 
-Versi ini memperbaiki persistensi upload **Database 01 / Produksi Giling & Gunting**.
+V65 memperbaiki kasus data terlihat `0` setelah logout/login walaupun record sebenarnya masih ada di Supabase.
 
-Perubahan utama:
-- upload Database 01 disimpan ke Supabase melalui satu RPC atomik;
-- client memverifikasi ulang jumlah/key record di server sebelum menyatakan upload sukses;
-- cache/login cepat V61 tetap dipertahankan;
-- Contong dan Quality tetap memakai jalur penyimpanan sebelumnya.
-
-## Wajib untuk V62
-Jalankan `FIX-V62-PRODUCTION-UPLOAD.sql` sekali di Supabase SQL Editor, lalu deploy `dashboard.html` dan `supabase-api.js` V62.
-
-Lihat `FIX-V62-README.md` untuk langkah singkat dan query verifikasi.
+- Frontend version: 65
+- Persistence backend: V64 chunked RPC
+- Tidak perlu SQL baru bila SQL V64 sudah terpasang.
+- Replace minimal: `dashboard.html` dan `supabase-api.js`.

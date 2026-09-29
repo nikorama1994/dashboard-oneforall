@@ -2,7 +2,7 @@
 
 <html lang="id">
 <head>
-<meta name="nct-dashboard-version" content="63">
+<meta name="nct-dashboard-version" content="65">
 <script id="nct-supabase-first-memory-store-v43">
 (function(){
   'use strict';
@@ -359,7 +359,7 @@ document.documentElement.classList.add('nct-auth-pending');
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="./supabase-config.js"></script>
-<script src="./supabase-api.js?v=20260929v63"></script>
+<script src="./supabase-api.js?v=20260929v65"></script>
 
 <script id="nct-supabase-extra-state-v27">
 (function(){
@@ -20196,7 +20196,7 @@ function handleDatabaseExcelUpload(event){
       recalcStocks();
 
       if(!window.NCTSupabase || typeof window.NCTSupabase.replaceProductionUpload!=="function"){
-        throw new Error("Supabase API V63 belum aktif. Upload supabase-api.js V63, jalankan SQL V63, lalu hard refresh dan coba lagi.");
+        throw new Error("Supabase API V64 belum aktif. Upload supabase-api.js V64, jalankan SQL V64, lalu hard refresh dan coba lagi.");
       }
 
       const uploadRows=data.filter(function(r){
@@ -38115,6 +38115,7 @@ body.role-viewer .adminAccessPage{display:none!important}
       }else if(id==='database'){
         if(typeof renderTable==='function')renderTable();
         window.updateDatabaseUploadHubCounts?.();
+        window.refreshDatabaseServerCountsV65?.();
       }else if(id==='backupData'){
         window.NCTBackupData?.onOpen?.();
       }else if(id==='settings'){
@@ -49189,6 +49190,33 @@ body.role-viewer .adminAccessPage{display:none!important}
     }).join('');
   };
 
+  window.__NCT_DB_SERVER_COUNTS_V65=window.__NCT_DB_SERVER_COUNTS_V65||{};
+  window.refreshDatabaseServerCountsV65=async function(){
+    if(!window.NCTSupabase?.fetchOperationalFingerprint)return window.__NCT_DB_SERVER_COUNTS_V65;
+    if(window.__NCT_DB_SERVER_COUNTS_V65_PROMISE)return window.__NCT_DB_SERVER_COUNTS_V65_PROMISE;
+    window.__NCT_DB_SERVER_COUNTS_V65_PROMISE=(async function(){
+      try{
+        const [prod,quality]=await Promise.all([
+          window.NCTSupabase.fetchOperationalFingerprint('production'),
+          window.NCTSupabase.fetchOperationalFingerprint('quality_giling')
+        ]);
+        window.__NCT_DB_SERVER_COUNTS_V65={
+          production:Number(prod?.count)||0,
+          quality_giling:Number(quality?.count)||0,
+          checkedAt:new Date().toISOString()
+        };
+        try{window.updateDatabaseUploadHubCounts?.()}catch(_){ }
+        return window.__NCT_DB_SERVER_COUNTS_V65;
+      }catch(err){
+        console.warn('[NCT V65] server count check skipped:',err);
+        return window.__NCT_DB_SERVER_COUNTS_V65;
+      }finally{
+        window.__NCT_DB_SERVER_COUNTS_V65_PROMISE=null;
+      }
+    })();
+    return window.__NCT_DB_SERVER_COUNTS_V65_PROMISE;
+  };
+
   window.updateDatabaseUploadHubCounts=function(){
     // V60: `data` dideklarasikan dengan top-level `let`, sehingga bukan property
     // `window.data`. Versi lama salah mengecek window.data dan card DATABASE 01
@@ -49199,6 +49227,8 @@ body.role-viewer .adminAccessPage{display:none!important}
     }catch(_){ }
     if(!glRows.length) glRows=readStore('giling_dashboard_2026_v4_clean');
     const glCount=Array.isArray(glRows)?glRows.length:0;
+    const serverCounts=window.__NCT_DB_SERVER_COUNTS_V65||{};
+    const glServerCount=Number(serverCounts.production)||0;
 
     const packagingCount=sourceContongRows().length;
     const ntmCount=readStore(NTM_STORE).length;
@@ -49215,15 +49245,18 @@ body.role-viewer .adminAccessPage{display:none!important}
     const activeBrandSet=new Set(activeBrands);
     const qualityActive=qualityUpload.filter(r=>!activeBrandSet.size||activeBrandSet.has(String(r?.brand||'').trim().toUpperCase())).length;
     const qualityHidden=Math.max(0,qualityUpload.length-qualityActive);
+    const qualityServerCount=Number(serverCounts.quality_giling)||0;
 
     if($('databaseGilingRowCount')){
-      $('databaseGilingRowCount').textContent=
-        glCount.toLocaleString('id-ID')+' DATA';
+      const shown=glCount||glServerCount;
+      $('databaseGilingRowCount').textContent=shown.toLocaleString('id-ID')+' DATA';
     }
     if($('databaseGilingCardStatus')){
       $('databaseGilingCardStatus').textContent=glCount
         ? 'Database Giling & Gunting termuat dari Supabase • '+glCount.toLocaleString('id-ID')+' record.'
-        : 'Belum ada data Giling & Gunting yang termuat dari Supabase.';
+        : (glServerCount
+          ? glServerCount.toLocaleString('id-ID')+' record tersedia di Supabase • sedang dimuat ke dashboard.'
+          : 'Belum ada data Giling & Gunting yang tersimpan di Supabase.');
     }
 
     if($('databaseContongRowCount')){
@@ -49238,13 +49271,15 @@ body.role-viewer .adminAccessPage{display:none!important}
     }
 
     if($('databaseQualityGilingRowCount')){
-      $('databaseQualityGilingRowCount').textContent=
-        qualityUpload.length.toLocaleString('id-ID')+' UPLOAD';
+      const shown=qualityUpload.length||qualityServerCount;
+      $('databaseQualityGilingRowCount').textContent=shown.toLocaleString('id-ID')+' UPLOAD';
     }
     if($('databaseQualityGilingCardStatus')){
       $('databaseQualityGilingCardStatus').textContent=qualityUpload.length
         ? 'Database Quality termuat dari Supabase • '+qualityUpload.length.toLocaleString('id-ID')+' record upload.'
-        : 'Belum ada Database Quality yang termuat dari Supabase.';
+        : (qualityServerCount
+          ? qualityServerCount.toLocaleString('id-ID')+' record Quality tersedia di Supabase • sedang dimuat ke dashboard.'
+          : 'Belum ada Database Quality yang tersimpan di Supabase.');
     }
     if($('databaseQualityGilingRouteCount')){
       $('databaseQualityGilingRouteCount').textContent=
@@ -49831,7 +49866,7 @@ body.role-viewer .adminAccessPage{display:none!important}
 
         const uploadRows=Array.from(incoming.values()).map(compactQualityRecord);
         if(!window.NCTSupabase?.replaceQualityGilingUpload){
-          throw new Error('Supabase API V63 belum aktif. Replace supabase-api.js V63, jalankan SQL V63, lalu hard refresh.');
+          throw new Error('Supabase API V64 belum aktif. Replace supabase-api.js V64, jalankan SQL V64, lalu hard refresh.');
         }
 
         setStatus('Data Quality terbaca. Mengganti database Quality lama di Supabase ...','');
